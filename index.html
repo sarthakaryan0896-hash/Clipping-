@@ -1,137 +1,285 @@
 <!DOCTYPE html>
-<html lang="en"><head><meta charset="utf-8">
+<html lang="en">
+<head>
+<meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>My Clipper</title>
 <style>
-body{font-family:system-ui,sans-serif;max-width:560px;margin:0 auto;padding:16px;background:#111;color:#eee}
-h1{font-size:22px}label{display:block;margin:12px 0 4px;font-size:14px;color:#aaa}
-input,select,button{width:100%;padding:12px;font-size:16px;border-radius:8px;border:1px solid #444;background:#222;color:#eee;box-sizing:border-box}
-button{background:#4f46e5;border:0;margin-top:16px;font-weight:600}button:disabled{opacity:.5}
-#st{margin:14px 0;color:#9ae6b4;white-space:pre-wrap}.clip{margin:16px 0;padding:10px;background:#1b1b1b;border-radius:8px}
-video{width:100%;border-radius:8px}a{color:#8ab4ff;display:block;margin-top:8px}.row{display:flex;gap:8px}.row>div{flex:1}
-</style></head><body>
+:root{--bg:#14161a;--fg:#eef0f3;--mut:#9aa1ad;--card:#1d2026;--line:#2d323b;--acc:#ffb703;--onacc:#1a1300}
+@media (prefers-color-scheme:light){:root{--bg:#f5f3ee;--fg:#1b1d21;--mut:#5f6672;--card:#fff;--line:#d9d6cd;--acc:#c77d00;--onacc:#fff}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.5 "Trebuchet MS",Verdana,sans-serif}
+main{max-width:640px;margin:0 auto;padding:20px 16px 60px}
+h1{font:800 34px/1.1 Georgia,serif;margin:8px 0 4px;letter-spacing:-.5px}
+p.sub{color:var(--mut);margin:0 0 20px}
+section{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:14px;margin-bottom:14px}
+label{display:block;font-size:14px;color:var(--mut);margin:10px 0 4px}
+input,select{width:100%;padding:10px;border-radius:6px;border:1px solid var(--line);background:var(--bg);color:var(--fg);font:inherit}
+.row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+button{width:100%;padding:13px;border:0;border-radius:6px;background:var(--acc);color:var(--onacc);font:700 16px inherit;margin-top:14px;cursor:pointer}
+button:disabled{opacity:.5}
+button:focus-visible,input:focus-visible,select:focus-visible{outline:3px solid var(--acc);outline-offset:2px}
+#log{color:var(--mut);font-size:14px;white-space:pre-wrap;min-height:20px}
+progress{width:100%;height:8px;margin-top:8px}
+.clip{border-top:1px solid var(--line);padding:10px 0}
+.clip:first-child{border-top:0}
+.clip b{display:block}
+.clip small{color:var(--mut)}
+.clip video{width:100%;max-height:420px;margin-top:8px;border-radius:6px;background:#000}
+.clip a{display:inline-block;margin-top:6px;color:var(--acc);font-weight:700}
+.warn{font-size:13px;color:var(--mut);margin-top:8px}
+#vid{position:fixed;left:-9999px;width:2px;height:2px}
+</style>
+</head>
+<body>
+<main>
 <h1>My Clipper</h1>
-<p style="color:#aaa;font-size:14px">Everything runs on your phone. Nothing is uploaded. Short videos (under ~10 min) work best.</p>
-<label>Video from your phone</label><input type="file" id="f" accept="video/*">
-<div class="row"><div><label>Language</label><select id="lang"><option value="">Auto</option><option value="hindi">Hindi</option><option value="english">English</option></select></div>
-<div><label>Accuracy</label><select id="model"><option value="Xenova/whisper-tiny">Fast (tiny)</option><option value="Xenova/whisper-base" selected>Normal (base)</option><option value="Xenova/whisper-small">Best (small, slow)</option></select></div></div>
-<div class="row"><div><label>Clips</label><input type="number" id="n" value="3" min="1" max="10"></div>
-<div><label>Seconds each</label><input type="number" id="len" value="40" min="10" max="120"></div></div>
-<label>Format</label><select id="fmt"><option value="v">Vertical 9:16 (Shorts/Reels)</option><option value="h">Horizontal 16:9</option></select>
-<label>Gemini key (optional, picks best moments)</label><input type="password" id="key" placeholder="leave empty for even spacing">
-<button id="go">Make clips</button>
-<div id="st"></div><div id="out"></div>
-<video id="v" playsinline style="display:none"></video>
-<script type="module">
-import { pipeline } from "https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.0.2";
-const $ = id => document.getElementById(id), st = m => $("st").textContent = m;
-const v = $("v");
-let actx, dest, srcNode;
+<p class="sub">Runs in your browser. Nothing is uploaded, except the transcript if you add a Gemini key.</p>
 
-async function decode(file) {
-  const buf = await file.arrayBuffer();
-  const c = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 16000 });
-  const a = await c.decodeAudioData(buf); c.close();
-  return a.getChannelData(0);
+<section>
+<label for="url">Video link (direct .mp4 link)</label>
+<input id="url" type="url" inputmode="url" placeholder="https://example.com/video.mp4">
+<label for="file">…or pick a video from your phone</label>
+<input id="file" type="file" accept="video/*">
+<p class="warn">YouTube, Instagram and similar page links can’t be downloaded from a browser. Save the video first and pick it above, or use a direct file link that allows cross-site access.</p>
+</section>
+
+<section>
+<div class="row">
+<div><label for="lang">Language</label>
+<select id="lang"><option value="auto">Auto</option><option value="hindi">Hindi</option><option value="english">English</option></select></div>
+<div><label for="acc">Accuracy</label>
+<select id="acc"><option value="tiny">Fast (tiny)</option><option value="base" selected>Normal (base)</option><option value="small">Best (small, slow)</option></select></div>
+<div><label for="n">Clips</label><input id="n" type="number" value="20" min="1" max="20"></div>
+<div><label for="len">Seconds each</label><input id="len" type="number" value="30" min="10" max="90"></div>
+</div>
+<label for="fmt">Format</label>
+<select id="fmt"><option value="v">Vertical 9:16 (Shorts/Reels)</option><option value="h">Horizontal 16:9</option></select>
+<label for="key">Gemini key (optional, picks the best moments)</label>
+<input id="key" type="password" autocomplete="off" placeholder="Leave empty to use the built-in scoring">
+<button id="go">Find best moments</button>
+</section>
+
+<section>
+<div id="log">Waiting for a video.</div>
+<progress id="bar" value="0" max="100" hidden></progress>
+</section>
+
+<section id="res" hidden>
+<div id="list"></div>
+<button id="render">Render clips with subtitles</button>
+<p class="warn">Rendering plays each clip in real time, so 20 clips of 30 seconds take about 10 minutes. Keep this tab open and the screen on.</p>
+</section>
+
+<video id="vid" playsinline preload="auto"></video>
+<canvas id="cv" hidden></canvas>
+
+<script>
+const $ = id => document.getElementById(id);
+const log = t => { $('log').textContent = t; };
+const bar = v => { $('bar').hidden = v == null; if (v != null) $('bar').value = v; };
+const HOOK = /(secret|never|always|shock|crazy|truth|mistake|biggest|worst|best|must|stop|warning|money|free|nobody|everyone|नहीं|कभी|सच|राज|सबसे|क्यों|कैसे|पैसा|गलती|खतरनाक)/gi;
+let segs = [], energy = [], dur = 0, clips = [], blob = null;
+
+async function getBlob() {
+  const f = $('file').files[0], u = $('url').value.trim();
+  if (f) return f;
+  if (!u) throw new Error('Pick a video or paste a direct video link.');
+  if (/youtube\.com|youtu\.be|instagram\.com|facebook\.com|tiktok\.com/i.test(u))
+    throw new Error('Page links like this can’t be downloaded in a browser. Save the video to your phone and pick the file instead.');
+  log('Downloading the video…');
+  let r;
+  try { r = await fetch(u); } catch (e) { throw new Error('The link blocked the download (cross-site access). Save the file and pick it from your phone instead.'); }
+  if (!r.ok) throw new Error('Download failed (' + r.status + ').');
+  return await r.blob();
 }
 
-async function pickGemini(segs, key, n, len) {
-  const t = segs.map(s => `[${s.s.toFixed(1)}-${s.e.toFixed(1)}] ${s.t}`).join("\n");
-  const p = `Pick the ${n} most engaging self-contained moments for short clips, each about ${len} seconds, starting and ending at sentence boundaries. Return ONLY JSON like [{"start":12.0,"end":55.0}].\n\n${t}`;
-  const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${key}`, {
-    method: "POST", headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ contents: [{ parts: [{ text: p }] }], generationConfig: { responseMimeType: "application/json" } }) });
-  if (!r.ok) throw new Error("Gemini " + r.status);
-  return JSON.parse((await r.json()).candidates[0].content.parts[0].text);
+async function decode(b) {
+  const ab = await new (window.AudioContext || window.webkitAudioContext)().decodeAudioData(await b.arrayBuffer());
+  const OAC = window.OfflineAudioContext || window.webkitOfflineAudioContext;
+  const off = new OAC(1, Math.ceil(ab.duration * 16000), 16000);
+  const s = off.createBufferSource(); s.buffer = ab; s.connect(off.destination); s.start();
+  return (await off.startRendering()).getChannelData(0);
 }
 
-function pickEven(segs, n, len, dur) {
-  const out = [], step = Math.max(len, (dur - len) / Math.max(1, n));
-  for (let i = 0; i < n; i++) {
-    const a0 = i * step; if (a0 >= dur) break;
-    const first = segs.find(s => s.s >= a0) || segs[segs.length - 1];
-    const a = first.s; let b = a;
-    for (const s of segs) if (s.s >= a && s.e - a <= len + 8) b = s.e;
-    if (b - a > 3) out.push({ start: a, end: b });
+function makeEnergy(a) {
+  const out = []; let mx = 1e-6;
+  for (let i = 0; i + 16000 <= a.length; i += 16000) {
+    let s = 0; for (let j = i; j < i + 16000; j += 8) s += a[j] * a[j];
+    const r = Math.sqrt(s / 2000); out.push(r); if (r > mx) mx = r;
+  }
+  return out.map(x => x / mx);
+}
+
+async function transcribe(audio) {
+  log('Loading the speech model (first time is slow)…');
+  const T = await import('https://cdn.jsdelivr.net/npm/@xenova/transformers@2.17.2');
+  T.env.allowLocalModels = false;
+  const model = { tiny: 'Xenova/whisper-tiny', base: 'Xenova/whisper-base', small: 'Xenova/whisper-small' }[$('acc').value];
+  const asr = await T.pipeline('automatic-speech-recognition', model, {
+    progress_callback: p => { if (p.status === 'progress') { log('Loading model… ' + Math.round(p.progress) + '%'); bar(p.progress); } }
+  });
+  log('Listening to the video and writing subtitles…'); bar(null);
+  const lang = $('lang').value;
+  const o = await asr(audio, { chunk_length_s: 30, stride_length_s: 5, return_timestamps: true, task: 'transcribe', ...(lang !== 'auto' ? { language: lang } : {}) });
+  segs = o.chunks.map(c => ({ s: c.timestamp[0], e: c.timestamp[1] ?? c.timestamp[0] + 3, t: c.text.trim() })).filter(x => x.t);
+}
+
+function heuristic(n, len, skip = []) {
+  const cands = [];
+  for (let st = 0; st + len <= dur + 0.5; st += 5) {
+    const en = Math.min(st + len, dur);
+    const txt = segs.filter(x => x.e > st && x.s < en).map(x => x.t).join(' ');
+    const words = txt.split(/\s+/).filter(Boolean).length;
+    let sc = words / len * 2 + (txt.match(/[!?]/g) || []).length * .7 + (txt.match(HOOK) || []).length * 1.5;
+    let e = 0; for (let i = Math.floor(st); i < en && i < energy.length; i++) e += energy[i];
+    sc += e / len * 8;
+    cands.push({ start: st, end: en, score: sc, title: txt.slice(0, 60) });
+  }
+  cands.sort((a, b) => b.score - a.score);
+  const pick = [...skip];
+  for (const c of cands) {
+    if (pick.length - skip.length >= n) break;
+    if (pick.every(p => c.start >= p.end || c.end <= p.start)) pick.push(c);
+  }
+  return pick.slice(skip.length);
+}
+
+async function viaGemini(key, n, len) {
+  const tr = segs.map(x => `[${Math.round(x.s)}-${Math.round(x.e)}] ${x.t}`).join('\n');
+  const prompt = `Below is a timestamped transcript of a video that is ${Math.round(dur)} seconds long. Pick the ${n} moments most likely to go viral as short clips: strong hook, emotion, surprise or a complete idea. Each clip is about ${len} seconds, inside 0-${Math.round(dur)}, with no overlap. Reply only with JSON: [{"start":number,"end":number,"title":"short title"}]\n\n${tr}`;
+  const r = await fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=' + encodeURIComponent(key), {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }], generationConfig: { responseMimeType: 'application/json' } })
+  });
+  const j = await r.json();
+  const arr = JSON.parse(j.candidates[0].content.parts[0].text);
+  const out = [];
+  for (const c of arr) {
+    const s = Math.max(0, +c.start), e = Math.min(dur, +c.end);
+    if (!(e - s >= 8)) continue;
+    if (out.every(p => s >= p.end || e <= p.start)) out.push({ start: s, end: e, title: c.title || '', score: 0 });
   }
   return out;
 }
 
-function wrap(ctx, text, maxW) {
-  const words = text.split(" "), lines = []; let cur = "";
-  for (const w of words) { const t = cur ? cur + " " + w : w;
-    if (ctx.measureText(t).width > maxW && cur) { lines.push(cur); cur = w; } else cur = t; }
-  if (cur) lines.push(cur); return lines;
+async function analyze() {
+  $('go').disabled = true; $('res').hidden = true;
+  try {
+    blob = await getBlob();
+    const v = $('vid'); v.src = URL.createObjectURL(blob);
+    await new Promise((ok, no) => { v.onloadedmetadata = ok; v.onerror = () => no(new Error('This video format can’t be played in your browser.')); });
+    dur = v.duration;
+    log('Reading the audio…');
+    const audio = await decode(blob);
+    energy = makeEnergy(audio);
+    await transcribe(audio);
+    const n = Math.min(20, +$('n').value || 20), len = +$('len').value || 30;
+    log('Choosing the best moments…');
+    clips = [];
+    const key = $('key').value.trim();
+    if (key) { try { clips = await viaGemini(key, n, len); } catch (e) { log('Gemini failed, using built-in scoring.'); } }
+    if (clips.length < n) clips = clips.concat(heuristic(n - clips.length, len, clips));
+    clips.sort((a, b) => a.start - b.start);
+    showList();
+    log(clips.length + ' clips found' + (clips.length < n ? ' (the video is too short for ' + n + ' separate clips)' : '') + '.');
+  } catch (e) { log('Error: ' + e.message); }
+  $('go').disabled = false; bar(null);
 }
 
-async function render(a, b, segs, vertical) {
-  const W = vertical ? 720 : 1280, H = vertical ? 1280 : 720;
-  const cv = document.createElement("canvas"); cv.width = W; cv.height = H;
-  const ctx = cv.getContext("2d");
-  const fs = Math.round(W * (vertical ? 0.07 : 0.04));
-  const stream = cv.captureStream(30);
-  dest.stream.getAudioTracks().forEach(t => stream.addTrack(t));
-  const mime = ["video/mp4;codecs=avc1", "video/webm;codecs=vp9,opus", "video/webm"].find(m => MediaRecorder.isTypeSupported(m)) || "";
-  const rec = new MediaRecorder(stream, mime ? { mimeType: mime, videoBitsPerSecond: 3e6 } : {});
-  const chunks = []; rec.ondataavailable = e => e.data.size && chunks.push(e.data);
-  v.currentTime = a; await new Promise(r => v.onseeked = r);
-  const done = new Promise(r => rec.onstop = r);
+const fmt = s => Math.floor(s / 60) + ':' + String(Math.floor(s % 60)).padStart(2, '0');
+function showList() {
+  $('list').innerHTML = '';
+  clips.forEach((c, i) => {
+    const d = document.createElement('div'); d.className = 'clip'; d.id = 'c' + i;
+    const b = document.createElement('b'); b.textContent = (i + 1) + '. ' + (c.title || 'Clip');
+    const s = document.createElement('small'); s.textContent = fmt(c.start) + ' to ' + fmt(c.end);
+    d.append(b, s); $('list').append(d);
+  });
+  $('res').hidden = false;
+}
+
+function phrases(c, per) {
+  const out = [];
+  for (const sg of segs) {
+    if (sg.e <= c.start || sg.s >= c.end) continue;
+    const w = sg.t.split(/\s+/), step = (sg.e - sg.s) / w.length;
+    for (let i = 0; i < w.length; i += per) {
+      out.push({ s: sg.s + i * step, e: sg.s + Math.min(i + per, w.length) * step, t: w.slice(i, i + per).join(' ') });
+    }
+  }
+  return out;
+}
+
+function wrap(g, text, maxW) {
+  const words = text.split(' '), lines = []; let cur = '';
+  for (const w of words) { const t = cur ? cur + ' ' + w : w; if (g.measureText(t).width > maxW && cur) { lines.push(cur); cur = w; } else cur = t; }
+  lines.push(cur); return lines;
+}
+
+let ac, dest;
+async function renderClip(c, i) {
+  const v = $('vid'), cv = $('cv'), vert = $('fmt').value === 'v';
+  const W = vert ? 720 : 1280, H = vert ? 1280 : 720;
+  cv.width = W; cv.height = H;
+  const g = cv.getContext('2d');
+  const ph = phrases(c, vert ? 3 : 5);
+  v.currentTime = c.start;
+  await new Promise(ok => { v.onseeked = ok; });
+  const st = cv.captureStream(30);
+  dest.stream.getAudioTracks().forEach(t => st.addTrack(t));
+  const mime = ['video/mp4', 'video/webm;codecs=vp9,opus', 'video/webm'].find(m => MediaRecorder.isTypeSupported(m)) || '';
+  const rec = new MediaRecorder(st, mime ? { mimeType: mime } : {});
+  const parts = []; rec.ondataavailable = e => e.data.size && parts.push(e.data);
+  const done = new Promise(ok => { rec.onstop = ok; });
   rec.start(); await v.play();
-  await new Promise(res => {
+  await new Promise(ok => {
     const draw = () => {
-      const t = v.currentTime;
-      if (t >= b || v.ended) return res();
-      const vw = v.videoWidth, vh = v.videoHeight, s = Math.max(W / vw, H / vh);
-      ctx.drawImage(v, (vw - W / s) / 2, (vh - H / s) / 2, W / s, H / s, 0, 0, W, H);
-      const seg = segs.find(x => t >= x.s && t < x.e);
-      if (seg) {
-        ctx.font = `bold ${fs}px sans-serif`; ctx.textAlign = "center";
-        ctx.lineWidth = fs / 5; ctx.strokeStyle = "#000"; ctx.fillStyle = "#fff"; ctx.lineJoin = "round";
-        const lines = wrap(ctx, seg.t, W * 0.9);
-        lines.forEach((l, i) => { const y = H - H * 0.12 - (lines.length - 1 - i) * fs * 1.2;
-          ctx.strokeText(l, W / 2, y); ctx.fillText(l, W / 2, y); });
+      const sc = Math.max(W / v.videoWidth, H / v.videoHeight), dw = v.videoWidth * sc, dh = v.videoHeight * sc;
+      g.drawImage(v, (W - dw) / 2, (H - dh) / 2, dw, dh);
+      const p = ph.find(x => v.currentTime >= x.s && v.currentTime < x.e);
+      if (p) {
+        const fs = vert ? 54 : 46;
+        g.font = '800 ' + fs + 'px "Noto Sans Devanagari",Arial,sans-serif';
+        g.textAlign = 'center'; g.lineJoin = 'round'; g.lineWidth = 10; g.strokeStyle = '#000'; g.fillStyle = '#fff';
+        const lines = wrap(g, p.t, W - 80), y0 = H * (vert ? .72 : .85);
+        lines.forEach((ln, k) => { const y = y0 + k * fs * 1.25; g.strokeText(ln, W / 2, y); g.fillText(ln, W / 2, y); });
       }
+      if (v.currentTime >= c.end || v.ended) return ok();
       requestAnimationFrame(draw);
     };
     draw();
   });
   v.pause(); rec.stop(); await done;
-  return { blob: new Blob(chunks, { type: rec.mimeType }), ext: rec.mimeType.includes("mp4") ? "mp4" : "webm" };
+  const type = mime.startsWith('video/mp4') ? 'video/mp4' : 'video/webm';
+  const url = URL.createObjectURL(new Blob(parts, { type }));
+  const box = $('c' + i);
+  const pv = document.createElement('video'); pv.src = url; pv.controls = true; pv.playsInline = true;
+  const a = document.createElement('a'); a.href = url; a.download = 'clip-' + (i + 1) + (type === 'video/mp4' ? '.mp4' : '.webm'); a.textContent = 'Download clip ' + (i + 1);
+  box.append(pv, document.createElement('br'), a);
 }
 
-$("go").onclick = async () => {
-  const file = $("f").files[0]; if (!file) return st("Choose a video first.");
-  $("go").disabled = true; $("out").innerHTML = "";
+async function renderAll() {
+  $('render').disabled = true;
   try {
-    actx = actx || new (window.AudioContext || window.webkitAudioContext)(); await actx.resume();
-    v.src = URL.createObjectURL(file); v.style.display = "none";
-    await new Promise((r, j) => { v.onloadedmetadata = r; v.onerror = () => j(new Error("Cannot open this video")); });
-    if (!srcNode) { srcNode = actx.createMediaElementSource(v); dest = actx.createMediaStreamDestination(); srcNode.connect(dest); }
-    st("Reading audio...");
-    const audio = await decode(file), dur = audio.length / 16000;
-    st("Loading speech model (first time downloads 40-250 MB)...");
-    const asr = await pipeline("automatic-speech-recognition", $("model").value, {
-      dtype: "q8", device: "wasm",
-      progress_callback: p => p.status === "progress" && st(`Downloading model ${Math.round(p.progress)}%`) });
-    st("Transcribing... this can take a few minutes. Keep the screen on.");
-    const lang = $("lang").value;
-    const res = await asr(audio, { return_timestamps: true, chunk_length_s: 30, stride_length_s: 5, task: "transcribe", ...(lang ? { language: lang } : {}) });
-    const segs = res.chunks.map(c => ({ s: c.timestamp[0], e: c.timestamp[1] ?? Math.min(dur, c.timestamp[0] + 4), t: c.text.trim() })).filter(x => x.t);
-    if (!segs.length) throw new Error("No speech found");
-    const n = +$("n").value, len = +$("len").value;
-    let picks; const key = $("key").value.trim();
-    try { if (!key) throw 0; st("Picking best moments..."); picks = await pickGemini(segs, key, n, len); }
-    catch (e) { picks = pickEven(segs, n, len, dur); }
-    for (let i = 0; i < picks.length; i++) {
-      const a = +picks[i].start, b = Math.min(+picks[i].end, dur);
-      st(`Rendering clip ${i + 1} of ${picks.length} (takes about ${Math.round(b - a)} s). Keep this tab open.`);
-      const { blob, ext } = await render(a, b, segs, $("fmt").value === "v");
-      const url = URL.createObjectURL(blob), d = document.createElement("div"); d.className = "clip";
-      d.innerHTML = `<video controls playsinline src="${url}"></video><a download="clip${i + 1}.${ext}" href="${url}">Download clip ${i + 1}</a>`;
-      $("out").appendChild(d);
+    if (!ac) {
+      ac = new (window.AudioContext || window.webkitAudioContext)();
+      dest = ac.createMediaStreamDestination();
+      ac.createMediaElementSource($('vid')).connect(dest);
     }
-    st("Done. Download your clips below.");
-  } catch (e) { st("Error: " + (e.message || e)); }
-  $("go").disabled = false;
-};
-</script></body></html>
+    await ac.resume();
+    for (let i = 0; i < clips.length; i++) {
+      log('Rendering clip ' + (i + 1) + ' of ' + clips.length + '…'); bar((i / clips.length) * 100);
+      await renderClip(clips[i], i);
+    }
+    log('Done. Download your clips below.');
+  } catch (e) { log('Error: ' + e.message); }
+  bar(null); $('render').disabled = false;
+}
+
+$('go').onclick = analyze;
+$('render').onclick = renderAll;
+</script>
+</main>
+</body>
+</html>
